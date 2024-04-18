@@ -1,0 +1,18 @@
+# If you need more help, visit the Docker Compose reference guide at
+# https://docs.docker.com/go/compose-spec-reference/
+
+name: funmesh-separate
+
+include:
+  - compose-microservices.yaml
+
+services:
+  server:
+    container_name: funmesh-server
+    build:
+      context: .
+    ports:
+      - 8080:8080
+#    stdin_open: true # docker run -i
+#    tty: true        # docker run -t
+    command: [ "headless=true", "roleId=0", "msHost=host.docker.internal" ]

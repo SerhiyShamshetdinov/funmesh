@@ -1,0 +1,15 @@
+# If you need more help, visit the Docker Compose reference guide at
+# https://docs.docker.com/go/compose-spec-reference/
+
+name: funmesh-combined
+
+services:
+  server:
+    container_name: server-combined
+    build:
+      context: .
+    ports:
+      - 8080:8080
+#    stdin_open: true # docker run -i
+#    tty: true        # docker run -t
+    command: [ "headless=true", "roleId=all" ]

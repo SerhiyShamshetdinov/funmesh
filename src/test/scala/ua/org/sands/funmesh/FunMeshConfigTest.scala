@@ -32,7 +32,8 @@ import org.slf4j.Logger
 
 class FunMeshConfigTest extends TestBase {
 
-  private val defaultBasePort: Int = FunMeshConfig().basePort
+  private val defaultConfig: FunMeshConfig = FunMeshConfig()
+  private val defaultBasePort: Int = defaultConfig.basePort
 
   "FunMeshConfig" should "reset roleId to 0 when setting allRoles=true" in {
     FunMeshConfig(roleId = 5, allRoles = true).roleId shouldBe 0
@@ -48,14 +49,14 @@ class FunMeshConfigTest extends TestBase {
       "" ->
         Right(FunMeshConfig()),
 
-      "mshost=testHost BASEport:99 ROLEid=5" ->
-        Right(FunMeshConfig(basePort = 99, allRoles = false, roleId = 5, msHost = "testHOST")),
+      "mshost=testHost BASEport:99 ROLEid=5 serverHost=LOCALHOST HeadLess=TRUE" ->
+        Right(FunMeshConfig(basePort = 99, allRoles = false, roleId = 5, msHost = "testHOST", serverHost = "localhost", headless = true)),
 
       "roleId=5 roleId=all" -> // correctly accept last
-        Right(FunMeshConfig(allRoles = true, roleId = 0)),
+        Right(FunMeshConfig(allRoles = true, roleId = 0, serverHost = "0.0.0.0", headless = false)),
 
-      "roleId=ALL roleId=6" -> // correctly accept last
-        Right(FunMeshConfig(allRoles = false, roleId = 6)),
+      "roleId=ALL roleId=6 headless:False" -> // correctly accept last
+        Right(FunMeshConfig(allRoles = false, roleId = 6, headless = false)),
 
       "mshost=testHostFirst mshost:testHostLast" -> // accept last
         Right(FunMeshConfig(msHost = "testhostlast")),
@@ -64,22 +65,22 @@ class FunMeshConfigTest extends TestBase {
         Right(FunMeshConfig(basePort = 100)),
 
       "-HELP" ->
-        Left(FunMeshConfig.usage(defaultBasePort)),
+        Left(FunMeshConfig.usage(defaultConfig)),
 
-      "-HELP basePort:100" ->
-        Left(FunMeshConfig.usage(100)),
+      "-HELP basePort:100 roleId=5" ->
+        Left(FunMeshConfig.usage(FunMeshConfig(basePort = 100, allRoles = false, roleId = 5))),
 
       "--?" ->
-        Left(FunMeshConfig.usage(defaultBasePort)),
+        Left(FunMeshConfig.usage(defaultConfig)),
 
       "/help" ->
-        Left(FunMeshConfig.usage(defaultBasePort)),
+        Left(FunMeshConfig.usage(defaultConfig)),
 
       "help" ->
-        Left(FunMeshConfig.usage(defaultBasePort)),
+        Left(FunMeshConfig.usage(defaultConfig)),
 
       "?" ->
-        Left(FunMeshConfig.usage(defaultBasePort)),
+        Left(FunMeshConfig.usage(defaultConfig)),
     )) {
       case (str, result) =>
         implicit val loggerMock: Logger = mock[Logger]
@@ -90,21 +91,27 @@ class FunMeshConfigTest extends TestBase {
 
   it should "log an error and return help" in {
     forEvery(Seq(
-      "mshost=testHost BASEport:8080 ROLEid=5 UnknownParameter" -> "invalid parameter or absent value - 'UnknownParameter'",
-      "msHost:" -> "invalid parameter or absent value - 'msHost'",
-      "msHost=" -> "invalid parameter or absent value - 'msHost'",
-      "msHost" -> "invalid parameter or absent value - 'msHost'",
-      "basePort=" -> "invalid parameter or absent value - 'basePort'",
+      "basePort=" -> "unknown parameter or absent value - 'basePort'",
       "basePort=-1" -> "'basePort' parameter value should be an integer between 0 & 65535 but got '-1'",
       "basePort=65536" -> "'basePort' parameter value should be an integer between 0 & 65535 but got '65536'",
-      "roleId=" -> "invalid parameter or absent value - 'roleId'",
+      "roleId=" -> "unknown parameter or absent value - 'roleId'",
       "roleId=every" -> "'roleId' parameter value should be 'all' or integer from 0 to 16 but got 'every'",
       "roleId=-1" -> "'roleId' parameter value should be 'all' or integer from 0 to 16 but got '-1'",
       "roleId=100" -> "'roleId' parameter value should be 'all' or integer from 0 to 16 but got '100'",
+      "mshost=testHost BASEport:8080 ROLEid=0 UnknownParameter" -> "unknown parameter or absent value - 'UnknownParameter'",
+      "msHost:" -> "'msHost' parameter value should not be empty",
+      "msHost=" -> "'msHost' parameter value should not be empty",
+      "msHost" -> "'msHost' parameter value should not be empty",
+      "serverHost:" -> "'serverHost' parameter value should not be empty",
+      "serverHost=" -> "'serverHost' parameter value should not be empty",
+      "serverHost" -> "'serverHost' parameter value should not be empty",
+      "headless=" -> "unknown parameter or absent value - 'headless'",
+      "headless=-1" -> "'headless' parameter value should be 'true' or 'false' but got '-1'",
+      "headless=YES" -> "'headless' parameter value should be 'true' or 'false' but got 'YES'",
     )) {
       case (str, error) =>
         implicit val loggerMock: Logger = mock[Logger]
-        FunMeshConfig.parse(str.split(" ").filterNot(_.isEmpty)) shouldBe Left(FunMeshConfig.usage(defaultBasePort))
+        FunMeshConfig.parse(str.split(" ").filterNot(_.isEmpty)) shouldBe Left(FunMeshConfig.usage(defaultConfig))
         verify(loggerMock).error(error)
     }
   }

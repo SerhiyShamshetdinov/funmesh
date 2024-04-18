@@ -35,8 +35,9 @@ import ua.org.sands.funmesh.server.{BinaryFunctionRole, MicroserviceRole, UnaryF
 import ua.org.sands.funmesh.tapir.EndpointsService._
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration._
 
 /*
  * Created by Serhiy Shamshetdinov
@@ -49,6 +50,13 @@ class EndpointsService(prometheusMetrics: PrometheusMetrics[Future],
   private[tapir] val logger = LoggerFactory.getLogger(getClass.getName)
 
   private[tapir] type ErrorInfo = String
+
+  private[tapir] val clientInterpreter: SttpClientInterpreter = SttpClientInterpreter()
+  private[tapir] val clientBackend = HttpClientFutureBackend()
+
+  private val shutdownPromise: Promise[Seq[String]] = Promise()
+
+  def shutdownFuture(): Future[Seq[String]] = shutdownPromise.future
 
   private[tapir] def resultHandler(funName: => String, request: FunRequest, response: Try[Num]): Try[Either[ErrorInfo, Num]] =
     response match {
@@ -65,19 +73,58 @@ class EndpointsService(prometheusMetrics: PrometheusMetrics[Future],
 
   private[tapir] val commonEndpoint = endpoint.get.out(jsonBody[Num]).errorOut(plainBody[ErrorInfo])
 
+  private[tapir] val helpServerEndpoint = endpoint.get.out(stringBody).errorOut(plainBody[ErrorInfo])
+    .in("help").description("Returns the run server type, used config and usage")
+    .serverLogic(_ => Future.successful[Either[ErrorInfo, String]](Right(FunMeshConfig.help(config))))
+
+  private[tapir] def shutdownServerLogic(u: Unit): Future[Either[ErrorInfo, String]] = {
+    val stopMessage = "The server successfully stopped"
+    if (config.allRoles || config.roleId != 0) {
+      shutdownPromise.success(Seq(stopMessage))
+      Future.successful(Right(stopMessage))
+    } else {
+      val microserviceShutdowns = (1 to MicroserviceRole.maxRoleId).map(shutdownMicroservice)
+      // find "results" only when all futures are ready since it will always find nothing and it should examine each Future value
+      val shutdownFuture = Future.find(microserviceShutdowns)(_ => false).map { _ =>
+        microserviceShutdowns.flatMap(_.value.flatMap(_.toOption)) :+ stopMessage // Try will always be recovered in shutdownMicroservice)
+      }
+      shutdownPromise.completeWith(shutdownFuture)
+      shutdownFuture.map(seq => Right(seq.mkString("\n")))
+    }
+  }
+
+  private def shutdownMicroservice(roleId: Int): Future[String] = {
+    val microserviceEndpoint = endpoint.get.out(stringBody).errorOut(plainBody[ErrorInfo]).in("shutdown")
+    val uri = uri"http://${config.msHost}:${config.basePort + roleId}"
+    val request = clientInterpreter.toRequestThrowErrors(microserviceEndpoint, Some(uri))
+
+    request({}).readTimeout(shutdownTimeout).send(clientBackend).transform {
+      case Failure(e) =>
+        val errorText = s"Exception while trying to shutdown microservice with roleId=$roleId : ${e.getMessage}"
+        logger.error(errorText, e)
+        Success(errorText)
+      case Success(_) =>
+        Success(s"Microservice with roleId=$roleId successfully shutdown by the call to its /shutdown")
+    }
+  }
+
+  private[tapir] val shutdownServerEndpoint = endpoint.get.out(stringBody).errorOut(plainBody[ErrorInfo])
+    .in("shutdown").description(if (config.allRoles || config.roleId != 0) "Shutdowns this server" else s"Shutdowns all microservice servers (timeout is $shutdownTimeout) and this one")
+    .serverLogic(shutdownServerLogic)
+
   private[tapir] lazy val primaryServerEndpoint = commonEndpoint
     .in("eval").description(s"Primary call to evaluate function value using primitive function ${if (config.allRoles) "endpoints" else "microservices"}")
     .in(query[String]("f").description("Function to evaluate").and(query[Num]("x").description("'x' parameter value of the f")).mapTo[FunEvalRequest])
     .serverLogic(fer => primaryEndpointFunction(fer.f, fer.x).transform(resultHandler("Primary function", fer, _)))
 
-  private[tapir] def withDescription[T <: MicroserviceRole[_]](role: T) = commonEndpoint.description(s"${role.description} function call")
+  private[tapir] def commonWithDescription[T <: MicroserviceRole[_]](role: T) = commonEndpoint.description(s"${role.description} function call")
 
   private[tapir] def unaryPublicEndpoint(role: UnaryFunctionRole): PublicEndpoint[UnaryRequest, ErrorInfo, Num, Any] =
-    withDescription(role).in(role.path)
+    commonWithDescription(role).in(role.path)
       .in(query[Num]("x").description("Single parameter value").mapTo[UnaryRequest])
 
   private[tapir] def binaryPublicEndpoint(role: BinaryFunctionRole): PublicEndpoint[BinaryRequest, ErrorInfo, Num, Any] =
-    withDescription(role).in(role.path)
+    commonWithDescription(role).in(role.path)
       .in(query[Num]("x").description("First parameter value").and(query[Num]("y").description("Second parameter value")).mapTo[BinaryRequest])
 
   private[tapir] lazy val unaryRoleToPublicEndpoint = unaryFunctionRoles.map(r => r -> unaryPublicEndpoint(r))
@@ -94,12 +141,12 @@ class EndpointsService(prometheusMetrics: PrometheusMetrics[Future],
 
   private[tapir] val apiEndpoints: List[ServerEndpoint[Any, Future]] =
     if (config.allRoles)
-      primaryServerEndpoint :: binaryServerEndpoints ++ unaryServerEndpoints
+      List(primaryServerEndpoint, helpServerEndpoint, shutdownServerEndpoint) ++ binaryServerEndpoints ++ unaryServerEndpoints
     else if (config.roleId == 0)
-      List(primaryServerEndpoint)
+      List(primaryServerEndpoint, helpServerEndpoint, shutdownServerEndpoint)
     else roleById(config.roleId) match {
-      case role: UnaryFunctionRole => List(unaryServerEndpoint(role, unaryPublicEndpoint(role)))
-      case role: BinaryFunctionRole => List(binaryServerEndpoint(role, binaryPublicEndpoint(role)))
+      case role: UnaryFunctionRole => List(unaryServerEndpoint(role, unaryPublicEndpoint(role)), helpServerEndpoint, shutdownServerEndpoint)
+      case role: BinaryFunctionRole => List(binaryServerEndpoint(role, binaryPublicEndpoint(role)), helpServerEndpoint, shutdownServerEndpoint)
     }
 
   private[tapir] val docEndpoints: List[ServerEndpoint[Any, Future]] =
@@ -108,9 +155,6 @@ class EndpointsService(prometheusMetrics: PrometheusMetrics[Future],
   val allEndpoints: List[ServerEndpoint[Any, Future]] = apiEndpoints ++ docEndpoints ++ List(prometheusMetrics.metricsEndpoint)
 
   /// Client relative
-  private[tapir] val clientInterpreter: SttpClientInterpreter = SttpClientInterpreter()
-  private[tapir] val clientBackend = HttpClientFutureBackend()
-
   private[tapir] lazy val primaryServerUri = uri"http://localhost:${config.basePort}"
 
   private[tapir] def buildUnaryFunction(role: UnaryFunctionRole, endpoint: PublicEndpoint[UnaryRequest, ErrorInfo, Num, Any]): Num => Future[Num] = {
@@ -138,6 +182,7 @@ class EndpointsService(prometheusMetrics: PrometheusMetrics[Future],
 
 object EndpointsService {
   private val funMeshVersion = "0.1.1"
+  private[tapir] val shutdownTimeout = 15.seconds
 
   private[tapir] sealed trait FunRequest
 

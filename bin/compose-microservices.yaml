@@ -1,0 +1,130 @@
+name: funmesh-separate-microservices
+
+services:
+  microservice1:
+    container_name: funmesh-microservice1
+    build:
+      context: .
+    ports:
+      - 8081:8081
+    command: [ "headless=true", "roleId=1" ]
+
+  microservice2:
+    container_name: funmesh-microservice2
+    build:
+      context: .
+    ports:
+      - 8082:8082
+    command: [ "headless=true", "roleId=2" ]
+
+  microservice3:
+    container_name: funmesh-microservice3
+    build:
+      context: .
+    ports:
+      - 8083:8083
+    command: [ "headless=true", "roleId=3" ]
+
+  microservice4:
+    container_name: funmesh-microservice4
+    build:
+      context: .
+    ports:
+      - 8084:8084
+    command: [ "headless=true", "roleId=4" ]
+
+  microservice5:
+    container_name: funmesh-microservice5
+    build:
+      context: .
+    ports:
+      - 8085:8085
+    command: [ "headless=true", "roleId=5" ]
+
+  microservice6:
+    container_name: funmesh-microservice6
+    build:
+      context: .
+    ports:
+      - 8086:8086
+    command: [ "headless=true", "roleId=6" ]
+
+  microservice7:
+    container_name: funmesh-microservice7
+    build:
+      context: .
+    ports:
+      - 8087:8087
+    command: [ "headless=true", "roleId=7" ]
+
+  microservice8:
+    container_name: funmesh-microservice8
+    build:
+      context: .
+    ports:
+      - 8088:8088
+    command: [ "headless=true", "roleId=8" ]
+
+  microservice9:
+    container_name: funmesh-microservice9
+    build:
+      context: .
+    ports:
+      - 8089:8089
+    command: [ "headless=true", "roleId=9" ]
+
+  microservice10:
+    container_name: funmesh-microservice10
+    build:
+      context: .
+    ports:
+      - 8090:8090
+    command: [ "headless=true", "roleId=10" ]
+
+  microservice11:
+    container_name: funmesh-microservice11
+    build:
+      context: .
+    ports:
+      - 8091:8091
+    command: [ "headless=true", "roleId=11" ]
+
+  microservice12:
+    container_name: funmesh-microservice12
+    build:
+      context: .
+    ports:
+      - 8092:8092
+    command: [ "headless=true", "roleId=12" ]
+
+  microservice13:
+    container_name: funmesh-microservice13
+    build:
+      context: .
+    ports:
+      - 8093:8093
+    command: [ "headless=true", "roleId=13" ]
+
+  microservice14:
+    container_name: funmesh-microservice14
+    build:
+      context: .
+    ports:
+      - 8094:8094
+    command: [ "headless=true", "roleId=14" ]
+
+  microservice15:
+    container_name: funmesh-microservice15
+    build:
+      context: .
+    ports:
+      - 8095:8095
+    command: [ "headless=true", "roleId=15" ]
+
+  microservice16:
+    container_name: funmesh-microservice16
+    build:
+      context: .
+    ports:
+      - 8096:8096
+    command: [ "headless=true", "roleId=16" ]

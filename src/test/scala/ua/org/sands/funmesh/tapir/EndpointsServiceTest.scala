@@ -143,25 +143,31 @@ class EndpointsServiceTest extends TestBase {
     endpointsService.primaryServerUri.port shouldBe Some(port)
   }
 
-  "allEndpoints" should "contain primary server and all role endpoints in Combined Mode" in {
+  "allEndpoints" should "contain primary server, help, shutdown and all role endpoints in Combined Mode" in {
     val endpointsService: EndpointsService = getEndpointsService(FunMeshConfig(allRoles = true))
 
-    endpointsService.allEndpoints.size shouldBe MicroserviceRole.allRoles.size + 1 + 1 + 4 // 1 - primary, 1 - metrics, 4 - Swagger
+    endpointsService.allEndpoints.size shouldBe MicroserviceRole.allRoles.size + 3 + 1 + 4 // 3 - primary, help, shutdown; 1 - metrics; 4 - Swagger
     endpointsService.allEndpoints should contain (endpointsService.primaryServerEndpoint)
+    endpointsService.allEndpoints should contain (endpointsService.helpServerEndpoint)
+    endpointsService.allEndpoints should contain (endpointsService.shutdownServerEndpoint)
   }
 
-  it should "contain primary server and no role endpoints in Separate Mode for primary server" in {
+  it should "contain primary server, help, shutdown and no role endpoints in Separate Mode for primary server" in {
     val endpointsService: EndpointsService = getEndpointsService(FunMeshConfig(allRoles = false, roleId = 0))
 
-    endpointsService.allEndpoints.size shouldBe 1 + 1 + 4 // 1 - primary, 1 - metrics, 4 - Swagger
+    endpointsService.allEndpoints.size shouldBe 3 + 1 + 4 // 3 - primary, help, shutdown; 1 - metrics; 4 - Swagger
     endpointsService.allEndpoints should contain (endpointsService.primaryServerEndpoint)
+    endpointsService.allEndpoints should contain (endpointsService.helpServerEndpoint)
+    endpointsService.allEndpoints should contain (endpointsService.shutdownServerEndpoint)
   }
 
-  it should "neither contain primary server nor role endpoints in Separate Mode for microservice" in {
+  it should "not contain primary server but 1 role endpoint, help and shutdown in Separate Mode for microservice" in {
     val endpointsService: EndpointsService = getEndpointsService(FunMeshConfig(allRoles = false, roleId = 1))
 
-    endpointsService.allEndpoints.size shouldBe 1 + 1 + 4 // 1 - microservice, 1 - metrics, 4 - Swagger
+    endpointsService.allEndpoints.size shouldBe 3 + 1 + 4 // 3 - microservice, help, shutdown; 1 - metrics; 4 - Swagger
     endpointsService.allEndpoints should not contain endpointsService.primaryServerEndpoint
+    endpointsService.allEndpoints should contain (endpointsService.helpServerEndpoint)
+    endpointsService.allEndpoints should contain (endpointsService.shutdownServerEndpoint)
   }
 
   // Client stub https://sttp.softwaremill.com/en/stable/testing.html

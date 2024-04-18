@@ -42,11 +42,12 @@ class FunMeshServer()(implicit val config: FunMeshConfig) {
 
   private def evaluateStringFunction(f: String, num: Num): Future[Num] = stringFunction.evaluate(f, num)
 
-  def startNettyFutureServer(): Future[NettyFutureServerBinding] = {
+  def startNettyFutureServer(): (Future[NettyFutureServerBinding], Future[Seq[String]]) = {
     val serverOptions = NettyFutureServerOptions.customiseInterceptors
       .metricsInterceptor(prometheusMetrics.metricsInterceptor())
       .options
     // sys.env.get("HTTP_PORT").flatMap(_.toIntOption).getOrElse(8080)
-    NettyFutureServer(serverOptions).port(config.serverPort).addEndpoints(endpointsService.allEndpoints).start()
+    (NettyFutureServer(serverOptions).host(config.serverHost).port(config.serverPort).addEndpoints(endpointsService.allEndpoints).start(),
+      endpointsService.shutdownFuture())
   }
 }
